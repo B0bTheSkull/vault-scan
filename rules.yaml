@@ -1,0 +1,241 @@
+# vault-scan detection rules
+#
+# Two detection strategies:
+#   1. Pattern-only  — the format is distinctive enough; a match is almost always real
+#   2. entropy_check — the pattern is broad (e.g. API_KEY=...), so we require high
+#                      Shannon entropy on the captured value to filter out placeholders
+#
+# Severity guide:
+#   critical — direct account/infrastructure access (AWS, private keys, GitHub tokens)
+#   high     — service tokens with significant blast radius (Stripe, Slack, SendGrid)
+#   medium   — tokens with limited scope or test-only keys
+#   low      — patterns that are useful to flag but rarely dangerous alone
+
+rules:
+
+  # ── AWS ─────────────────────────────────────────────────────────────────────
+  # Access key IDs have a known prefix scheme Amazon publishes:
+  #   AKIA = long-term IAM key  ABIA = STS assumed-role  ACCA = CodeCommit  etc.
+  # The 16-char suffix is base32 encoded. No entropy check needed — the prefix alone
+  # is distinctive enough.
+  - id: aws_access_key_id
+    name: AWS Access Key ID
+    pattern: '(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'
+    severity: critical
+
+  # The secret key is 40 base64 chars. On its own that's ambiguous, so we anchor
+  # it to a labeled assignment (aws_secret, secret_key, etc.) and require entropy.
+  - id: aws_secret_access_key
+    name: AWS Secret Access Key
+    pattern: '(?i)aws[_\-.]*secret[_\-.]*(?:access[_\-.]*)?key\s*[=:]\s*["\x60]?([A-Za-z0-9/+]{40})'
+    severity: critical
+    entropy_check: true
+
+  # ── GitHub ───────────────────────────────────────────────────────────────────
+  # GitHub prefixes all token types — no entropy check needed, the prefix is unique.
+  - id: github_pat_classic
+    name: GitHub Personal Access Token
+    pattern: 'ghp_[A-Za-z0-9]{36}'
+    severity: critical
+
+  - id: github_oauth_token
+    name: GitHub OAuth Token
+    pattern: 'gho_[A-Za-z0-9]{36}'
+    severity: critical
+
+  - id: github_app_token
+    name: GitHub App / Actions Token
+    pattern: '(?:ghu|ghs|ghr)_[A-Za-z0-9]{36}'
+    severity: critical
+
+  - id: github_fine_grained_pat
+    name: GitHub Fine-Grained PAT
+    pattern: 'github_pat_[A-Za-z0-9_]{82}'
+    severity: critical
+
+  # ── GitLab ───────────────────────────────────────────────────────────────────
+  - id: gitlab_pat
+    name: GitLab Personal Access Token
+    pattern: 'glpat-[A-Za-z0-9_\-]{20}'
+    severity: critical
+
+  # ── Slack ────────────────────────────────────────────────────────────────────
+  # Slack token types are identified by their xox* prefix + segment structure.
+  - id: slack_bot_token
+    name: Slack Bot Token
+    pattern: 'xoxb-[0-9]{10,13}-[0-9]{10,13}-[A-Za-z0-9]{24}'
+    severity: high
+
+  - id: slack_user_token
+    name: Slack User Token
+    pattern: 'xoxp-[0-9]{10,13}-[0-9]{10,13}-[0-9]{10,13}-[A-Za-z0-9]{32}'
+    severity: high
+
+  # ── Stripe ───────────────────────────────────────────────────────────────────
+  # sk_live = real money. sk_test = test mode (still worth flagging, different severity).
+  - id: stripe_secret_live
+    name: Stripe Live Secret Key
+    pattern: 'sk_live_[A-Za-z0-9]{24,}'
+    severity: critical
+
+  - id: stripe_secret_test
+    name: Stripe Test Secret Key
+    pattern: 'sk_test_[A-Za-z0-9]{24,}'
+    severity: medium
+
+  - id: stripe_publishable
+    name: Stripe Publishable Key
+    pattern: 'pk_(?:live|test)_[A-Za-z0-9]{24,}'
+    severity: low
+
+  # ── Google ───────────────────────────────────────────────────────────────────
+  # AIza prefix is Google's API key marker. 35 base64-ish chars follow.
+  - id: google_api_key
+    name: Google API Key
+    pattern: 'AIza[0-9A-Za-z_\-]{35}'
+    severity: high
+
+  - id: google_oauth_secret
+    name: Google OAuth Client Secret
+    pattern: 'GOCSPX-[A-Za-z0-9_\-]{28}'
+    severity: high
+
+  # ── Other SaaS ───────────────────────────────────────────────────────────────
+  - id: sendgrid_api_key
+    name: SendGrid API Key
+    pattern: 'SG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}'
+    severity: high
+
+  - id: twilio_api_key
+    name: Twilio API Key
+    pattern: 'SK[a-z0-9]{32}'
+    severity: high
+
+  - id: npm_token
+    name: NPM Access Token
+    pattern: 'npm_[A-Za-z0-9]{36}'
+    severity: high
+
+  - id: pypi_token
+    name: PyPI API Token
+    # PyPI tokens always start with pypi-AgEI (base64 for the header)
+    pattern: 'pypi-AgEI[A-Za-z0-9_\-]{50,}'
+    severity: high
+
+  - id: digitalocean_pat
+    name: DigitalOcean PAT
+    pattern: 'dop_v1_[A-Za-z0-9]{64}'
+    severity: high
+
+  - id: shopify_access_token
+    name: Shopify Access Token
+    pattern: 'shpat_[A-Za-z0-9]{32}'
+    severity: high
+
+  - id: mailchimp_api_key
+    name: Mailchimp API Key
+    # Format: <32 hex chars>-us<datacenter number>
+    pattern: '[A-Za-z0-9]{32}-us[0-9]{1,2}'
+    severity: high
+    entropy_check: true
+
+  # ── Private Keys ─────────────────────────────────────────────────────────────
+  # PEM-encoded private keys all start with a recognizable header. No entropy needed.
+  - id: private_key_rsa
+    name: RSA Private Key
+    pattern: '-----BEGIN RSA PRIVATE KEY-----'
+    severity: critical
+
+  - id: private_key_openssh
+    name: OpenSSH Private Key
+    pattern: '-----BEGIN OPENSSH PRIVATE KEY-----'
+    severity: critical
+
+  - id: private_key_ec
+    name: EC Private Key
+    pattern: '-----BEGIN EC PRIVATE KEY-----'
+    severity: critical
+
+  - id: private_key_pgp
+    name: PGP Private Key Block
+    pattern: '-----BEGIN PGP PRIVATE KEY BLOCK-----'
+    severity: critical
+
+  - id: private_key_generic
+    name: Generic Private Key
+    pattern: '-----BEGIN (?:ENCRYPTED )?PRIVATE KEY-----'
+    severity: critical
+
+  # ── JWTs ─────────────────────────────────────────────────────────────────────
+  # JWTs are three base64url segments separated by dots.
+  # Header always starts with eyJ (base64 of '{"').
+  # Medium severity because the token itself is often short-lived, but it can
+  # reveal signing secrets or contain sensitive claims.
+  - id: jwt
+    name: JSON Web Token
+    pattern: 'eyJ[A-Za-z0-9_=-]{10,}\.[A-Za-z0-9_=-]{10,}\.[A-Za-z0-9_=.+/-]{10,}'
+    severity: medium
+
+  # ── Database Connection Strings ──────────────────────────────────────────────
+  # URI format embeds credentials: scheme://user:password@host/db
+  # We match anything after :// that's long enough to contain credentials.
+  - id: uri_mongodb
+    name: MongoDB Connection String
+    pattern: 'mongodb(?:\+srv)?://[^\s<>"'']{15,}'
+    severity: high
+
+  - id: uri_postgresql
+    name: PostgreSQL Connection String
+    pattern: 'postgres(?:ql)?://[^\s<>"'']{15,}'
+    severity: high
+
+  - id: uri_mysql
+    name: MySQL Connection String
+    pattern: 'mysql://[^\s<>"'']{15,}'
+    severity: high
+
+  - id: uri_redis
+    name: Redis Connection String
+    # redis:// without credentials is common for localhost — entropy gates it
+    pattern: 'redis://[^\s<>"'']{15,}'
+    severity: medium
+    entropy_check: true
+
+  - id: uri_amqp
+    name: AMQP / RabbitMQ Connection String
+    pattern: 'amqps?://[^\s<>"'']{15,}'
+    severity: medium
+
+  # ── Generic Patterns (entropy-gated) ─────────────────────────────────────────
+  # These are high false-positive without entropy. The regex is intentionally broad
+  # to catch non-standard naming, but we rely on entropy to filter placeholders.
+  - id: generic_api_key
+    name: Generic API Key Assignment
+    pattern: '(?i)(?:api[_\-.]?key|apikey|api[_\-.]?token)\s*[=:]\s*["\x60]?([A-Za-z0-9_\-.+/]{20,})'
+    severity: medium
+    entropy_check: true
+
+  - id: generic_secret
+    name: Generic Secret Assignment
+    pattern: '(?i)(?:secret|client[_\-.]?secret)\s*[=:]\s*["\x60]?([A-Za-z0-9_\-.+/]{20,})'
+    severity: medium
+    entropy_check: true
+
+  - id: generic_password
+    name: Generic Password Assignment
+    # Intentionally broad — entropy check does the heavy lifting
+    pattern: '(?i)(?:password|passwd|pwd)\s*[=:]\s*["\x60]?([^\s"''`]{8,})'
+    severity: low
+    entropy_check: true
+
+  - id: generic_token
+    name: Generic Token Assignment
+    pattern: '(?i)(?:token|auth[_\-.]?token|bearer)\s*[=:]\s*["\x60]?([A-Za-z0-9_\-.+/]{20,})'
+    severity: low
+    entropy_check: true
+
+
+# ── Entropy configuration ─────────────────────────────────────────────────────
+entropy:
+  threshold: 4.5    # Shannon entropy minimum (bits per character)
+  min_length: 20    # Ignore strings shorter than this (too short to measure reliably)
