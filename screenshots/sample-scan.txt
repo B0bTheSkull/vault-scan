@@ -1,0 +1,39 @@
+
+vault-scan  /tmp/vault-scan-target
+Commits scanned: 2  |  Files touched: 4
+
+Found 5 finding(s):
+────────────────────────────────────────────────────────────────────────
+[CRITICAL] AWS Access Key ID
+  file  : config.py:5
+  commit: 77486805  Demo User  2026-05-13T21:57:28-06:00
+  match : AKIA************Y000
+  ctx   : AWS_ACCESS_KEY_ID = "AKIAXXXXXXFAKEKEY0001"
+────────────────────────────────────────────────────────────────────────
+[CRITICAL] GitHub Personal Access Token
+  file  : config.py:9
+  commit: 77486805  Demo User  2026-05-13T21:57:28-06:00
+  match : ghp_********************************xxxx
+  ctx   : GITHUB_TOKEN = "ghp_FaKeGitHubPATxxxxxxxxxxxxxxxxxxxxxxxx"
+────────────────────────────────────────────────────────────────────────
+[CRITICAL] Stripe Live Secret Key
+  file  : deploy.sh:7
+  commit: 77486805  Demo User  2026-05-13T21:57:28-06:00
+  match : sk_l**************************************XXXX
+  ctx   : # STRIPE_SECRET_KEY was here: sk_live_**REDACTED-DEMO**
+────────────────────────────────────────────────────────────────────────
+[CRITICAL] RSA Private Key
+  file  : private_key.pem:2
+  commit: 77486805  Demo User  2026-05-13T21:57:28-06:00
+  match : ----***********************----
+  ctx   : -----BEGIN RSA PRIVATE KEY-----
+────────────────────────────────────────────────────────────────────────
+[HIGH] PostgreSQL Connection String
+  file  : .env:3
+  commit: 77486805  Demo User  2026-05-13T21:57:28-06:00
+  match : post*******************************************************yapp
+  ctx   : DATABASE_URL=postgresql://fakeuser:n0tAR3alPa55w0rd@db.example.invalid/myapp
+────────────────────────────────────────────────────────────────────────
+
+Summary: [CRITICAL] 4 [HIGH] 1
+
