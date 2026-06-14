@@ -50,7 +50,11 @@ class Finding:
             safe = m[:4] + "*" * (len(m) - 8) + m[-4:]
         else:
             safe = "****"
-        return Finding(**{**asdict(self), "match": safe})
+        # The context line typically contains the raw secret too, so masking
+        # only `match` still leaks it via print_text() / print_json(). Replace
+        # every occurrence of the raw secret in the context with the safe form.
+        safe_context = self.context.replace(m, safe) if m else self.context
+        return Finding(**{**asdict(self), "match": safe, "context": safe_context})
 
 
 @dataclass
